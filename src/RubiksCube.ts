@@ -1,10 +1,11 @@
-import { InstancedMesh, Mesh, Vector3, Plane, PlaneGeometry, MeshBasicMaterial, DoubleSide, BoxBufferGeometry, Color, DataTexture, Material, Matrix4, MeshPhongMaterial, RGBFormat, Group, Scene } from "three";
-import { mapToAxisAlignedVector } from "./Utilities";
+import { InstancedMesh, Mesh, Vector3, Plane, PlaneGeometry, MeshBasicMaterial, DoubleSide, BoxBufferGeometry, Color, DataTexture, Material, Matrix4, MeshPhongMaterial, RGBFormat, Group, Scene, Raycaster } from "three";
+import { mapToAxisAlignedVector, rotateAboutPoint } from "./Utilities";
+
+const EPS = 0.000001;
 
 export class RubiksCube extends Group { // should be group
     private instancedPlane: InstancedMesh;
     private cubeMatrix: Mesh[][][];
-    private cubeDataMatrix: number[][][];
     private allCubes: Mesh[]; // Todo make group
 
     private selectedCubePosition: Vector3;
@@ -25,13 +26,11 @@ export class RubiksCube extends Group { // should be group
         super();
         const faceCount = 6; //6 * 9
         const geometry = new PlaneGeometry(3, 3);
-        // geometry.scale(0.9, 0.9, 0.9);
         const material = new MeshBasicMaterial({ transparent: true, opacity: 0, side: DoubleSide });
         this.instancedPlane = new InstancedMesh(geometry, material, faceCount)
         this.instanceIdNormal = new Map();
-        this.children.push(this.instancedPlane);
+        this.add(this.instancedPlane);
         this.cubeMatrix = [];
-        this.cubeDataMatrix = [];
         this.allCubes = [];
         this.selectedCubePosition = new Vector3();
 
@@ -152,20 +151,17 @@ export class RubiksCube extends Group { // should be group
             for (let j = 0; j <= 2; ++j) {
                 for (let k = 0; k <= 2; ++k) {
                     const cube = this.getCube(boxMaterials);
-                    const matrix = new Matrix4().makeTranslation(i, j, k + 1);//.scale(new Vector3(0.9, 0.9, 0.9));
+                    const matrix = new Matrix4().makeTranslation(i, j, k);//.scale(new Vector3(0.9, 0.9, 0.9));
                     cube.applyMatrix4(matrix);
-                    this.children.push(cube);
+                    this.add(cube);
                     // this.scene.add(cube);
                     if (!this.cubeMatrix[i]) {
                         this.cubeMatrix[i] = [];
-                        this.cubeDataMatrix[i] = []
                     }
                     if (!this.cubeMatrix[i][j]) {
                         this.cubeMatrix[i][j] = [];
-                        this.cubeDataMatrix[i][j] = [];
                     }
                     this.cubeMatrix[i][j][k] = cube;
-                    this.cubeDataMatrix[i][j][k] = (i * 9) + (j * 3) + k;
                     this.allCubes.push(cube);
                 }
             }
@@ -217,6 +213,66 @@ export class RubiksCube extends Group { // should be group
         this.instancedPlane.setColorAt(index, color);
         this.instanceIdNormal.set(index, new Vector3(1, 0, 0)); //normal to outside
         index++;
+    }
+
+    getPlaneOfIntersection(raycaster: Raycaster, target: Plane): boolean {
+        const planeIntersections = raycaster.intersectObject(this.instancedPlane);
+        if (planeIntersections.length > 0) {
+            this.selectedPlaneId = planeIntersections[0].instanceId || 0;
+            const normal = this.instanceIdNormal.get(this.selectedPlaneId) || new Vector3();
+            const intersections = raycaster.intersectObjects(this.allCubes);
+            if (intersections.length > 0) {
+                this.selectedCubePosition.copy(intersections[0].object.position);
+                this.planeForRotation.setFromNormalAndCoplanarPoint(normal, this.selectedCubePosition);
+                target.copy(this.planeForRotation);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    rotateLayer(dir: Vector3) {
+        if (this.cubesToRotate.length === 0) {
+            this.calculateAxisAndPointForRotation(dir);
+            this.collectCubes();
+        }
+        else {
+            const planeNormal = this.instanceIdNormal.get(this.selectedPlaneId);
+            if (planeNormal) {
+                dir.multiply(this.directionOfMouseMove).multiply(this.directionOfMouseMove);
+                this.axisOfRotation = new Vector3().crossVectors(planeNormal, dir).normalize();
+            }
+        }
+
+        const angle = dir.length();
+        for (const cube of this.cubesToRotate) {
+            rotateAboutPoint(cube, this.pointOfRotation, this.axisOfRotation, angle);
+        }
+    }
+
+    snapLayer() {
+        if (this.cubesToRotate.length) {
+            //snapping logic
+            const accumulatedAngle = new Vector3().subVectors(this.cubesToRotatePreviousPosition[0], this.pointOfRotation).angleTo(new Vector3().subVectors(this.cubesToRotate[0].position, this.pointOfRotation));
+            const plane = new Plane().setFromCoplanarPoints(this.pointOfRotation, this.cubesToRotatePreviousPosition[0], this.cubesToRotate[0].position);
+            const noOf90degrees = Math.round(accumulatedAngle * 2 / Math.PI);
+            const remainingRotationDegrees = (noOf90degrees * Math.PI / 2) - accumulatedAngle;
+            for (let i = 0; i < this.cubesToRotate.length; ++i) {
+                rotateAboutPoint(this.cubesToRotate[i], this.pointOfRotation, plane.normal, remainingRotationDegrees);
+                const position = new Vector3(Math.round(this.cubesToRotate[i].position.x), Math.round(this.cubesToRotate[i].position.y), Math.round(this.cubesToRotate[i].position.z));
+                this.cubesToRotate[i].position.copy(position);
+            }
+
+            for (let i = 0; i < this.cubesToRotate.length; ++i) {
+                const position = this.cubesToRotate[i].position;
+                this.cubeMatrix[position.x][position.y][position.z] = this.cubesToRotate[i];
+
+            }
+        }
+        this.cubesToRotate = [];
+        this.cubesToRotatePreviousPosition = [];
+
     }
 
 }

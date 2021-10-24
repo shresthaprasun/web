@@ -17,6 +17,7 @@ export class App extends Component {
   componentDidMount() {
     this.project.init(this.ref.current);
     this.project.animate();
+    window["project"] = this.project;
   }
 
   render() {

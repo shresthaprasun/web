@@ -1,8 +1,8 @@
-import { AmbientLight, BoxBufferGeometry, Color, DataTexture, DoubleSide, InstancedMesh, Material, Matrix4, Mesh, MeshBasicMaterial, MeshPhongMaterial, Object3D, PerspectiveCamera, Plane, PlaneGeometry, Quaternion, Raycaster, RGBFormat, Scene, Vector2, Vector3, WebGLRenderer } from 'three';
+import { AmbientLight, AxesHelper, BoxBufferGeometry, Color, DataTexture, DoubleSide, InstancedMesh, Material, Matrix4, Mesh, MeshBasicMaterial, MeshPhongMaterial, Object3D, PerspectiveCamera, Plane, PlaneGeometry, Quaternion, Raycaster, RGBFormat, Scene, SphereBufferGeometry, Vector2, Vector3, WebGLRenderer } from 'three';
 import { VRButton } from "../node_modules/three/examples/jsm/webxr/VRButton";
+import { RubiksCube } from './RubiksCube';
 
 
-//VR - default camera at 0,0,0 looking at (0,0,-1), scaling and offset to control the position
 //features grab to scale, grab to rotate each side, grabe to rtate all cube
 
 //https://github.com/mrdoob/three.js/blob/master/examples/webxr_vr_dragging.html
@@ -35,6 +35,12 @@ export class Project {
 
     private mouse: Vector2;
 
+    private rubiksCube: RubiksCube;
+    private planeForRotation: Plane;
+    private pointOnPlane: Vector3;
+
+
+
     constructor() {
         this.renderer = new WebGLRenderer({ antialias: true });
         this.renderer.setPixelRatio(window.devicePixelRatio);
@@ -46,7 +52,7 @@ export class Project {
         const light1 = new AmbientLight(0xffffff);
         this.scene.add(light1)
 
-        this.target = new Vector3(1, 1, 1);
+        this.target = new Vector3(0, 0, 0);
         this._moveCurr = new Vector2();
         this._movePrev = new Vector2();
         this._eye = new Vector3();
@@ -61,17 +67,23 @@ export class Project {
         this.pointerMoved = false;
 
         this.raycaster = new Raycaster();
-        this.mouse = new Vector2();       
+        this.mouse = new Vector2();
         this.isModelSelected = false;
-        
+        this.rubiksCube = new RubiksCube();
+        this.rubiksCube.applyMatrix4(new Matrix4().makeTranslation(-1, -1, -1).scale(new Vector3(0.5, 0.5, 0.5)));
+        this.scene.add(this.rubiksCube);
+        this.planeForRotation = new Plane();
+        this.pointOnPlane = new Vector3();
+
+
     }
 
 
 
     init(container: HTMLElement) {
         this.camera = new PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 100);
-        // this.camera.up.set(0, 1, 0);
-        // this.camera.position.set(1, 0, 5);
+        this.camera.up.set(0, 1, 0);
+        this.camera.position.set(5, 5, 5);
         this.camera.lookAt(1, 1, 1);
         this.renderer.setSize(container.clientWidth, container.clientHeight);
         // this.camera.aspect = container.clientWidth / container.clientHeight;
@@ -89,11 +101,15 @@ export class Project {
         this.screen.width = box.width;
         this.screen.height = box.height;
 
-        this.addEventListeners();       
+        this.addEventListeners();
 
         // const axisHelper = new AxesHelper();
-        // axisHelper.position.set(-1, -1, -1);
+        // axisHelper.position.set(0, 0, 0);
         // this.scene.add(axisHelper);
+
+        // const sphere = new Mesh(new SphereBufferGeometry(0.1), new MeshBasicMaterial({ color: "red" }))
+        // sphere.position.set(0, 0, 0);
+        // this.scene.add(sphere);
     }
 
 
@@ -106,19 +122,10 @@ export class Project {
             this._movePrev.copy(this._moveCurr);
             this.pointerDown = true;
             this.raycaster.setFromCamera(this.mouse, this.camera);
-            const planeIntersections = this.raycaster.intersectObject(this.instancedPlane);
-
-            if (planeIntersections.length > 0) {
-                this.selectedPlaneId = planeIntersections[0].instanceId || 0;
-                const normal = this.instanceIdNormal.get(this.selectedPlaneId) || new Vector3();
-                const intersections = this.raycaster.intersectObjects(this.allCubes);
-                if (intersections.length > 0) {
-                    this.isModelSelected = true;
-                    this.selectedCubePosition.copy(intersections[0].object.position);
-                    this.planeForRotation.setFromNormalAndCoplanarPoint(normal, this.selectedCubePosition);
-                    const hit = this.raycaster.ray.intersectPlane(this.planeForRotation, new Vector3());
-                    hit && this.pointOnPlane.copy(hit);
-                }
+            if (this.rubiksCube.getPlaneOfIntersection(this.raycaster, this.planeForRotation)) {
+                this.isModelSelected = true;
+                const hit = this.raycaster.ray.intersectPlane(this.planeForRotation, new Vector3());
+                hit && this.pointOnPlane.copy(hit);
             }
             this.pointerMoved = false;
         });
@@ -133,22 +140,7 @@ export class Project {
                     const dir = new Vector3().subVectors(hit, this.pointOnPlane);
                     const len = dir.length()
                     if (len > EPS) {
-                        if (!this.pointerMoved) {
-                            this.calculateAxisAndPointForRotation(dir);
-                            this.collectCubes();
-                        }
-                        else {
-                            const planeNormal = this.instanceIdNormal.get(this.selectedPlaneId);
-                            if (planeNormal) {
-                                dir.multiply(this.directionOfMouseMove).multiply(this.directionOfMouseMove);
-                                this.axisOfRotation = new Vector3().crossVectors(planeNormal, dir).normalize();
-                            }
-                        }
-
-                        const angle = dir.length();
-                        for (const cube of this.cubesToRotate) {
-                            rotateAboutPoint(cube, this.pointOfRotation, this.axisOfRotation, angle);
-                        }
+                        this.rubiksCube.rotateLayer(dir);
                         this.pointOnPlane.copy(hit);
                         this.pointerMoved = true;
                     }
@@ -160,54 +152,19 @@ export class Project {
                     this._moveCurr.copy(this.getMouseOnCircle(event.pageX, event.pageY));
                 }
             }
-
         });
 
         this.renderer.domElement.addEventListener("pointerup", () => {
-            if (this.isModelSelected && this.cubesToRotate.length) {
-                //snapping logic
-                const accumulatedAngle = new Vector3().subVectors(this.cubesToRotatePreviousPosition[0], this.pointOfRotation).angleTo(new Vector3().subVectors(this.cubesToRotate[0].position, this.pointOfRotation));
-                const plane = new Plane().setFromCoplanarPoints(this.pointOfRotation, this.cubesToRotatePreviousPosition[0], this.cubesToRotate[0].position);
-                const noOf90degrees = Math.round(accumulatedAngle * 2 / Math.PI);
-                const remainingRotationDegrees = (noOf90degrees * Math.PI / 2) - accumulatedAngle;
-                for (let i = 0; i < this.cubesToRotate.length; ++i) {
-                    rotateAboutPoint(this.cubesToRotate[i], this.pointOfRotation, plane.normal, remainingRotationDegrees);
-                    const position = new Vector3(Math.round(this.cubesToRotate[i].position.x), Math.round(this.cubesToRotate[i].position.y), Math.round(this.cubesToRotate[i].position.z));
-                    this.cubesToRotate[i].position.copy(position);
-                }
-
-                for (let i = 0; i < this.cubesToRotate.length; ++i) {
-                    const position = this.cubesToRotate[i].position;
-                    this.cubeMatrix[position.x][position.y][position.z] = this.cubesToRotate[i];
-                    this.cubeDataMatrix[this.cubesToRotatePreviousPosition[i].x][this.cubesToRotatePreviousPosition[i].y][this.cubesToRotatePreviousPosition[i].z] = position.x * 9 + position.y * 3 + position.z;
-
-                }
-
-                for (let i = 0; i <= 2; ++i) {
-                    for (let j = 0; j <= 2; ++j) {
-                        for (let k = 0; k <= 2; ++k) {
-                            console.log(this.cubeMatrix[i][j][k].position.x * 9 + this.cubeMatrix[i][j][k].position.y * 3 + this.cubeMatrix[i][j][k].position.z);
-                        }
-                    }
-                }
+            if (this.isModelSelected) {
+                this.rubiksCube.snapLayer();
             }
-            // }
-            this.cubesToRotate = [];
-            this.cubesToRotatePreviousPosition = [];
             this.pointerDown = false;
             this.isModelSelected = false;
             this.pointerMoved = false;
         });
     }
 
-
-
-
-
-
     render() {
-        // this.quaternion.setFromAxisAngle(new Vector3(1, 0, 0), 0.001);
-        // this.camera.up.applyQuaternion(this.quaternion);
         this.renderer.clear();
         if (this.pointerDown) {
             this.update();
@@ -217,8 +174,6 @@ export class Project {
 
     animate() {
         this.renderer.setAnimationLoop(this.render.bind(this));
-        // requestAnimationFrame(this.animate.bind(this));
-        // this.render();
     }
 
     getMouseOnCircle(pageX: number, pageY: number) {
@@ -294,13 +249,5 @@ export class Project {
         }
         this._movePrev.copy(this._moveCurr);
     }
-}
-
-function mapToAxisAlignedVector(dir: Vector3, planeNormal: Vector3): Vector3 {
-    throw new Error('Function not implemented.');
-}
-
-function rotateAboutPoint(cube: Mesh<import("three").BufferGeometry, Material | Material[]>, pointOfRotation: Vector3, axisOfRotation: Vector3, angle: number) {
-    throw new Error('Function not implemented.');
 }
 
