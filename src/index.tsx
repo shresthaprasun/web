@@ -3,9 +3,11 @@ import ReactDOM from 'react-dom';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+import { Portfolio } from './Portfolio';
 
 ReactDOM.render(
   <React.StrictMode>
+    <Portfolio/>
     <App />
   </React.StrictMode>,
   document.getElementById('root')
