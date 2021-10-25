@@ -44,5 +44,8 @@
   },
   "devDependencies": {
     "@types/three": "^0.133.0"
+  },
+  "optionalDependencies": {
+    "fsevents": "^2.3.2"
   }
 }

@@ -1,15 +1,14 @@
-import { InstancedMesh, Mesh, Vector3, Plane, PlaneGeometry, MeshBasicMaterial, DoubleSide, BoxBufferGeometry, Color, DataTexture, Material, Matrix4, MeshPhongMaterial, RGBFormat, Group, Scene, Raycaster } from "three";
+import { InstancedMesh, Mesh, Vector3, Plane, PlaneGeometry, MeshBasicMaterial, DoubleSide, BoxBufferGeometry, Color, DataTexture, Material, Matrix4, MeshPhongMaterial, RGBFormat, Group, Raycaster } from "three";
 import { mapToAxisAlignedVector, rotateAboutPoint } from "./Utilities";
 
 const EPS = 0.000001;
 
-export class RubiksCube extends Group { // should be group
+export class RubiksCube extends Group {
     private instancedPlane: InstancedMesh;
     private cubeMatrix: Mesh[][][];
-    private allCubes: Mesh[]; // Todo make group
+    private allCubes: Mesh[];
 
     private selectedCubePosition: Vector3;
-    private pointOnPlane: Vector3;
     private selectedPlaneId: number;
 
     private instanceIdNormal: Map<number, Vector3>;
@@ -19,7 +18,6 @@ export class RubiksCube extends Group { // should be group
 
     private pointOfRotation: Vector3;
     private axisOfRotation: Vector3;
-    private planeForRotation: Plane;
     private directionOfMouseMove: Vector3;
 
     constructor() {
@@ -35,25 +33,21 @@ export class RubiksCube extends Group { // should be group
         this.selectedCubePosition = new Vector3();
 
         this.selectedPlaneId = -1;
-
-        this.pointOnPlane = new Vector3();
-
         this.cubesToRotate = [];
         this.cubesToRotatePreviousPosition = [];
 
         this.pointOfRotation = new Vector3();
         this.axisOfRotation = new Vector3();
-        this.planeForRotation = new Plane();
         this.directionOfMouseMove = new Vector3();
         this.buildCube();
         this.addInstancedPlanes();
     }
 
-    getDirAxis(dir: Vector3): string {
+    private getDirAxis(dir: Vector3): string {
         return Math.abs(dir.x) > Math.abs(dir.y) ? (Math.abs(dir.x) > Math.abs(dir.z) ? "x" : (Math.abs(dir.y) > Math.abs(dir.z) ? "y" : "z")) : (Math.abs(dir.y) > Math.abs(dir.z) ? "y" : "z");
     }
 
-    collectCubes() {
+    private collectCubes() {
         for (let i = 0; i < 3; ++i) {
             i = this.axisOfRotation.x !== 0 ? 3 : i;
             for (let j = 0; j < 3; ++j) {
@@ -70,7 +64,7 @@ export class RubiksCube extends Group { // should be group
         }
     }
 
-    calculateAxisAndPointForRotation(dir: Vector3) {
+    private calculateAxisAndPointForRotation(dir: Vector3) {
         const planeNormal = this.instanceIdNormal.get(this.selectedPlaneId);
         if (planeNormal) {
             this.directionOfMouseMove.copy(mapToAxisAlignedVector(dir, planeNormal));
@@ -90,7 +84,7 @@ export class RubiksCube extends Group { // should be group
         }
     }
 
-    createTexture(colorString: string): DataTexture {
+    private createTexture(colorString: string): DataTexture {
         const width = 512 * 2;
         const height = 512 * 2;
 
@@ -132,7 +126,7 @@ export class RubiksCube extends Group { // should be group
         return new DataTexture(data, width, height, RGBFormat);
     }
 
-    buildMaterials(): Material[] {
+    private buildMaterials(): Material[] {
         return ["#e34234", "orange", "royalblue", "forestgreen", "whitesmoke", "#ffe135"]// [front, back, top, bottom, left, right]
             .map((color: string) => {
                 const mat = new MeshPhongMaterial({ side: DoubleSide });
@@ -141,11 +135,11 @@ export class RubiksCube extends Group { // should be group
             });
     }
 
-    getCube(boxMaterials: Material[]) {
+    private getCube(boxMaterials: Material[]) {
         return new Mesh(new BoxBufferGeometry(1, 1, 1), boxMaterials);
     }
 
-    buildCube() {
+    private buildCube() {
         const boxMaterials = this.buildMaterials();
         for (let i = 0; i <= 2; ++i) {
             for (let j = 0; j <= 2; ++j) {
@@ -168,7 +162,7 @@ export class RubiksCube extends Group { // should be group
         }
     }
 
-    addInstancedPlanes() {
+    private addInstancedPlanes() {
         let index = 0;
         const color = new Color("black");
 
@@ -215,7 +209,7 @@ export class RubiksCube extends Group { // should be group
         index++;
     }
 
-    getPlaneOfIntersection(raycaster: Raycaster, target: Plane): boolean {
+    public getPlaneOfIntersection(raycaster: Raycaster, target: Plane): boolean {
         const planeIntersections = raycaster.intersectObject(this.instancedPlane);
         if (planeIntersections.length > 0) {
             this.selectedPlaneId = planeIntersections[0].instanceId || 0;
@@ -223,8 +217,7 @@ export class RubiksCube extends Group { // should be group
             const intersections = raycaster.intersectObjects(this.allCubes);
             if (intersections.length > 0) {
                 this.selectedCubePosition.copy(intersections[0].object.position);
-                this.planeForRotation.setFromNormalAndCoplanarPoint(normal, this.selectedCubePosition);
-                target.copy(this.planeForRotation);
+                target.setFromNormalAndCoplanarPoint(normal, this.selectedCubePosition);
                 return true;
             }
         }
@@ -232,7 +225,7 @@ export class RubiksCube extends Group { // should be group
         return false;
     }
 
-    rotateLayer(dir: Vector3) {
+    public rotateLayer(dir: Vector3) {
         if (this.cubesToRotate.length === 0) {
             this.calculateAxisAndPointForRotation(dir);
             this.collectCubes();
@@ -251,7 +244,7 @@ export class RubiksCube extends Group { // should be group
         }
     }
 
-    snapLayer() {
+    public snapLayer() {
         if (this.cubesToRotate.length) {
             //snapping logic
             const accumulatedAngle = new Vector3().subVectors(this.cubesToRotatePreviousPosition[0], this.pointOfRotation).angleTo(new Vector3().subVectors(this.cubesToRotate[0].position, this.pointOfRotation));

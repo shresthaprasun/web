@@ -1,5 +1,6 @@
-import { AmbientLight, AxesHelper, BoxBufferGeometry, Color, DataTexture, DoubleSide, InstancedMesh, Material, Matrix4, Mesh, MeshBasicMaterial, MeshPhongMaterial, Object3D, PerspectiveCamera, Plane, PlaneGeometry, Quaternion, Raycaster, RGBFormat, Scene, SphereBufferGeometry, Vector2, Vector3, WebGLRenderer } from 'three';
+import { AmbientLight, BufferGeometry, Group, Line, Matrix4, Mesh, MeshBasicMaterial, Object3D, PerspectiveCamera, Plane, Quaternion, Raycaster, Scene, SphereBufferGeometry, Vector2, Vector3, WebGLRenderer } from 'three';
 import { VRButton } from "../node_modules/three/examples/jsm/webxr/VRButton";
+import { XRControllerModelFactory } from '../node_modules/three/examples/jsm/webxr/XRControllerModelFactory.js';
 import { RubiksCube } from './RubiksCube';
 
 
@@ -17,7 +18,6 @@ export class Project {
     private camera: PerspectiveCamera;
 
     private pointerDown: boolean;
-    private pointerMoved: boolean;
     private isModelSelected: boolean;
     private screen: { left: number, top: number, width: number, height: number };
 
@@ -40,6 +40,16 @@ export class Project {
     private pointOnPlane: Vector3;
 
 
+    private controller1: Group;
+    private controller2: Group;
+    private controllerGrip1: Group;
+    private controllerGrip2: Group;
+
+    private tempMatrix: Matrix4;
+    private group: Group;
+    private intersected: Object3D[];
+    private isselectStart: boolean;
+
 
     constructor() {
         this.renderer = new WebGLRenderer({ antialias: true });
@@ -52,7 +62,7 @@ export class Project {
         const light1 = new AmbientLight(0xffffff);
         this.scene.add(light1)
 
-        this.target = new Vector3(0, 0, 0);
+        this.target = new Vector3(0, 0, -7);
         this._moveCurr = new Vector2();
         this._movePrev = new Vector2();
         this._eye = new Vector3();
@@ -64,18 +74,25 @@ export class Project {
         this.screen = { left: 0, top: 0, width: 0, height: 0 };
 
         this.pointerDown = false;
-        this.pointerMoved = false;
 
         this.raycaster = new Raycaster();
         this.mouse = new Vector2();
         this.isModelSelected = false;
         this.rubiksCube = new RubiksCube();
-        this.rubiksCube.applyMatrix4(new Matrix4().makeTranslation(-1, -1, -1).scale(new Vector3(0.5, 0.5, 0.5)));
+        this.rubiksCube.applyMatrix4(new Matrix4().makeTranslation(-1, -1, -8));//.scale(new Vector3(0.5, 0.5, 0.5)));
         this.scene.add(this.rubiksCube);
         this.planeForRotation = new Plane();
         this.pointOnPlane = new Vector3();
 
+        this.controller1 = this.renderer.xr.getController(0);
+        this.controller2 = this.renderer.xr.getController(1);
+        this.controllerGrip1 = this.renderer.xr.getControllerGrip(0);
+        this.controllerGrip2 = this.renderer.xr.getControllerGrip(1);
 
+        this.tempMatrix = new Matrix4();
+        this.group = new Group();
+        this.intersected = [];
+        this.isselectStart = false;
     }
 
 
@@ -83,14 +100,14 @@ export class Project {
     init(container: HTMLElement) {
         this.camera = new PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 100);
         this.camera.up.set(0, 1, 0);
-        this.camera.position.set(5, 5, 5);
-        this.camera.lookAt(1, 1, 1);
+        this.camera.position.set(0, 0, 0);
+        this.camera.lookAt(0, 0, -1);
         this.renderer.setSize(container.clientWidth, container.clientHeight);
         // this.camera.aspect = container.clientWidth / container.clientHeight;
         container.appendChild(this.renderer.domElement);
 
         this.renderer.xr.enabled = true;
-        document.body.appendChild(VRButton.createButton(this.renderer));
+        container.appendChild(VRButton.createButton(this.renderer));
 
         const box = this.renderer.domElement.getBoundingClientRect();
         // adjustments come from similar code in the jquery offset() function
@@ -102,6 +119,7 @@ export class Project {
         this.screen.height = box.height;
 
         this.addEventListeners();
+        this.addXRControllers();
 
         // const axisHelper = new AxesHelper();
         // axisHelper.position.set(0, 0, 0);
@@ -112,60 +130,224 @@ export class Project {
         // this.scene.add(sphere);
     }
 
+    private addXRControllers() {
+        // controllers
 
+        // this.controller1 = this.renderer.xr.getController(0);
+        this.controller2.addEventListener('selectstart', this.onSelectStart.bind(this));
+        this.controller2.addEventListener('select', this.onSelect.bind(this));
+        this.controller2.addEventListener('selectend', this.onSelectEnd.bind(this));
+        this.scene.add(this.controller1);
 
+        // this.controller2 = this.renderer.xr.getController(1);
+        // this.controller2.addEventListener('selectstart', this.onSelectStart.bind(this));
+        // this.controller2.addEventListener('selectend', this.onSelectEnd.bind(this));
+        this.scene.add(this.controller2);
 
+        const controllerModelFactory = new XRControllerModelFactory();
+
+        // this.controllerGrip1 = this.renderer.xr.getControllerGrip(0);
+        this.controllerGrip1.add(controllerModelFactory.createControllerModel(this.controllerGrip1));
+        this.scene.add(this.controllerGrip1);
+
+        // this.controllerGrip2 = this.renderer.xr.getControllerGrip(1);
+        this.controllerGrip2.add(controllerModelFactory.createControllerModel(this.controllerGrip2));
+        this.scene.add(this.controllerGrip2);
+
+        //
+        const geometry = new BufferGeometry().setFromPoints([new Vector3(0, 0, 0), new Vector3(0, 0, - 1)]);
+
+        const line = new Line(geometry);
+        line.name = 'line';
+        line.scale.z = 5;
+
+        this.controller1.add(line.clone());
+        this.controller2.add(line.clone());
+    }
 
     addEventListeners() {
-        this.renderer.domElement.addEventListener("pointerdown", (event) => {
-            this._moveCurr.copy(this.getMouseOnCircle(event.pageX, event.pageY));
-            this._movePrev.copy(this._moveCurr);
-            this.pointerDown = true;
+        this.renderer.domElement.addEventListener("pointerdown", this.onPointerDown.bind(this));
+        this.renderer.domElement.addEventListener("pointermove", this.onPointerMove.bind(this));
+        this.renderer.domElement.addEventListener("pointerup", this.onPointerUp.bind(this));
+        this.renderer.domElement.addEventListener("resize", this.onWindowResize.bind(this));
+    }
+
+    private onPointerDown(event: PointerEvent) {
+        this._moveCurr.copy(this.getMouseOnCircle(event.pageX, event.pageY));
+        this._movePrev.copy(this._moveCurr);
+        this.pointerDown = true;
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+        if (this.rubiksCube.getPlaneOfIntersection(this.raycaster, this.planeForRotation)) {
+            this.isModelSelected = true;
+            this.planeForRotation.applyMatrix4(this.rubiksCube.matrix);
+            const hit = this.raycaster.ray.intersectPlane(this.planeForRotation, new Vector3());
+            hit && this.pointOnPlane.copy(hit);
+        }
+    }
+
+    private onPointerMove(event: PointerEvent) {
+        this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+        this.mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
+        if (this.isModelSelected) {
             this.raycaster.setFromCamera(this.mouse, this.camera);
+            const hit = this.raycaster.ray.intersectPlane(this.planeForRotation, new Vector3());
+            if (hit) {
+                const dir = new Vector3().subVectors(hit, this.pointOnPlane);
+                const len = dir.length()
+                if (len > EPS) {
+                    this.rubiksCube.rotateLayer(dir);
+                    this.pointOnPlane.copy(hit);
+                }
+            }
+        }
+        else {
+            if (this.pointerDown) {
+                this._movePrev.copy(this._moveCurr);
+                this._moveCurr.copy(this.getMouseOnCircle(event.pageX, event.pageY));
+            }
+        }
+    }
+
+    private onPointerUp() {
+        if (this.isModelSelected) {
+            this.rubiksCube.snapLayer();
+        }
+        this.pointerDown = false;
+        this.isModelSelected = false;
+    }
+
+    private onSelectStart(event) {
+        const controller = event.target;
+        if (!this.isselectStart) {
+            this.tempMatrix.identity().extractRotation(controller.matrixWorld);
+
+            this.raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+            this.raycaster.ray.direction.set(0, 0, - 1).applyMatrix4(this.tempMatrix);
+
             if (this.rubiksCube.getPlaneOfIntersection(this.raycaster, this.planeForRotation)) {
                 this.isModelSelected = true;
+                this.planeForRotation.applyMatrix4(this.rubiksCube.matrix);
                 const hit = this.raycaster.ray.intersectPlane(this.planeForRotation, new Vector3());
                 hit && this.pointOnPlane.copy(hit);
             }
-            this.pointerMoved = false;
-        });
+        }
+        else{
+            this.onSelect(event)
+        }
 
-        this.renderer.domElement.addEventListener("pointermove", (event: PointerEvent) => {
-            this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            this.mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
-            if (this.isModelSelected) {
-                this.raycaster.setFromCamera(this.mouse, this.camera);
-                const hit = this.raycaster.ray.intersectPlane(this.planeForRotation, new Vector3());
-                if (hit) {
-                    const dir = new Vector3().subVectors(hit, this.pointOnPlane);
-                    const len = dir.length()
-                    if (len > EPS) {
-                        this.rubiksCube.rotateLayer(dir);
-                        this.pointOnPlane.copy(hit);
-                        this.pointerMoved = true;
-                    }
+
+        // const intersections = this.getIntersections(controller);
+
+        // if (intersections.length > 0) {
+
+        //     const intersection = intersections[0];
+
+        //     const object = intersection.object;
+        //     object["material"].emissive.b = 1;
+        //     controller.attach(object);
+
+        //     controller.userData.selected = object;
+
+        // }
+    }
+    private onSelect(event) {
+
+
+        if (this.isModelSelected) {
+            const controller = event.target;
+
+            this.tempMatrix.identity().extractRotation(controller.matrixWorld);
+
+            this.raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+            this.raycaster.ray.direction.set(0, 0, - 1).applyMatrix4(this.tempMatrix);
+            const hit = this.raycaster.ray.intersectPlane(this.planeForRotation, new Vector3());
+            if (hit) {
+                const dir = new Vector3().subVectors(hit, this.pointOnPlane);
+                const len = dir.length()
+                if (len > EPS) {
+                    this.rubiksCube.rotateLayer(dir);
+                    this.pointOnPlane.copy(hit);
+                    const sphere = new Mesh(new SphereBufferGeometry(0.6), new MeshBasicMaterial({ color: "red" }))
+                    sphere.position.set(0, 0, 0);
+                    this.scene.add(sphere);
+
                 }
             }
-            else {
-                if (this.pointerDown) {
-                    this._movePrev.copy(this._moveCurr);
-                    this._moveCurr.copy(this.getMouseOnCircle(event.pageX, event.pageY));
-                }
-            }
-        });
+        }
+    }
 
-        this.renderer.domElement.addEventListener("pointerup", () => {
-            if (this.isModelSelected) {
-                this.rubiksCube.snapLayer();
-            }
-            this.pointerDown = false;
-            this.isModelSelected = false;
-            this.pointerMoved = false;
-        });
+    private onSelectEnd(event) {
+        const controller = event.target;
+
+        if (this.isModelSelected) {
+            this.rubiksCube.snapLayer();
+        }
+        this.isModelSelected = false;
+        this.isselectStart = false;
+    }
+
+    private onWindowResize() {
+        this.camera.aspect = window.innerWidth / window.innerHeight;
+        this.camera.updateProjectionMatrix();
+
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    private getIntersections(controller: Group) {
+
+        this.tempMatrix.identity().extractRotation(controller.matrixWorld);
+
+        this.raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+        this.raycaster.ray.direction.set(0, 0, - 1).applyMatrix4(this.tempMatrix);
+
+        return this.raycaster.intersectObjects(this.group.children, false);
+
+    }
+
+    private intersectObjects(controller: Group) {
+
+        // Do not highlight when already selected
+
+        if (controller.userData.selected !== undefined) return;
+
+        const line = controller.getObjectByName('line');
+        const intersections = this.getIntersections(controller);
+
+        if (intersections.length > 0) {
+
+            const intersection = intersections[0];
+
+            const object = intersection.object;
+            object["material"].emissive.r = 1;
+            this.intersected.push(object);
+            if (line)
+                line.scale.z = intersection.distance;
+
+        } else {
+            if (line)
+                line.scale.z = 5;
+
+        }
+
+    }
+
+    private cleanIntersected() {
+
+        while (this.intersected.length) {
+
+            const object = this.intersected.pop();
+            if (object)
+                object["material"].emissive.r = 0;
+
+        }
+
     }
 
     render() {
-        this.renderer.clear();
+        // this.renderer.clear();
+        this.cleanIntersected();
+        this.intersectObjects(this.controller1);
+        this.intersectObjects(this.controller2);
         if (this.pointerDown) {
             this.update();
         }
