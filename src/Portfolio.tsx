@@ -17,10 +17,12 @@ export class Portfolio extends Component {
   }
 
   handleClickOutside(event) {
-    if (this.ref.current && !this.ref.current.contains(event.target)) {
-      // this.props.onClickOutside && this.props.onClickOutside();
-      this.setState({ showViewer: false })
-      this.isClicked = false;
+    if (this.ref.current) {
+      const boundingRect: DOMRect = this.ref.current.getBoundingClientRect();
+      if (event.clientX < boundingRect.x || event.clientX > boundingRect.x + boundingRect.width || event.clientY < boundingRect.y || event.clientY > boundingRect.y + boundingRect.height) {
+        this.setState({ showViewer: false })
+        this.isClicked = false;
+      }
     }
   };
 
