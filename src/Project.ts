@@ -1,4 +1,4 @@
-import { AmbientLight, BufferGeometry, Group, Line, Matrix4, Mesh, MeshBasicMaterial, Object3D, PerspectiveCamera, Plane, Quaternion, Raycaster, Scene, SphereBufferGeometry, Vector2, Vector3, WebGLRenderer } from 'three';
+import { AmbientLight, Audio, AudioListener, AudioLoader, BufferGeometry, Group, Line, Matrix4, Mesh, MeshBasicMaterial, Object3D, PerspectiveCamera, Plane, Quaternion, Raycaster, Scene, SphereBufferGeometry, Vector2, Vector3, WebGLRenderer } from 'three';
 import { VRButton } from "../node_modules/three/examples/jsm/webxr/VRButton";
 import { XRControllerModelFactory } from '../node_modules/three/examples/jsm/webxr/XRControllerModelFactory.js';
 import { RubiksCube } from './RubiksCube';
@@ -50,6 +50,8 @@ export class Project {
     private intersected: Object3D[];
     private isselectStart: boolean;
 
+    private audio: Audio;
+
 
     constructor() {
         this.renderer = new WebGLRenderer({ antialias: true });
@@ -93,6 +95,14 @@ export class Project {
         this.group = new Group();
         this.intersected = [];
         this.isselectStart = false;
+
+        const listener = new AudioListener();
+        this.camera.add(listener);
+        this.audio = new Audio(listener);
+        const audioLoader = new AudioLoader();
+        audioLoader.load('rubikscube.wav',  (buffer) => {
+            this.audio.setBuffer(buffer);
+        });
     }
 
 
@@ -210,6 +220,7 @@ export class Project {
 
     private onPointerUp() {
         if (this.isModelSelected) {
+            this.audio.play();
             this.rubiksCube.snapLayer();
         }
         this.pointerDown = false;
@@ -231,7 +242,7 @@ export class Project {
                 hit && this.pointOnPlane.copy(hit);
             }
         }
-        else{
+        else {
             this.onSelect(event)
         }
 

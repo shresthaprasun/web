@@ -35,3 +35,4 @@ export function mapToAxisAlignedVector(mouseDir: Vector3, planeNormal: Vector3):
     }
     return result;
 }
+
