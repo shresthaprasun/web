@@ -6,6 +6,6 @@ EXPOSE 3000
 
 FROM base as production
 ENV NODE_ENV=production
-RUN npm i
+RUN npm ci
 COPY . ./
 CMD ["npm", "start"]
