@@ -53,6 +53,7 @@ export class Project {
     private audio: Audio;
 
 
+
     constructor() {
         this.renderer = new WebGLRenderer({ antialias: true });
         this.renderer.setPixelRatio(window.devicePixelRatio);
@@ -100,8 +101,9 @@ export class Project {
         this.camera.add(listener);
         this.audio = new Audio(listener);
         const audioLoader = new AudioLoader();
-        audioLoader.load('rubikscube.wav',  (buffer) => {
+        audioLoader.load('rubikscube.wav', (buffer) => {
             this.audio.setBuffer(buffer);
+            this.audio.setVolume(0.5);
         });
     }
 
@@ -176,9 +178,13 @@ export class Project {
     }
 
     addEventListeners() {
+        this.renderer.domElement.addEventListener("touchstart", (e) => { e.preventDefault(); e.stopImmediatePropagation() });
+        this.renderer.domElement.addEventListener("touchend", (e) => { e.preventDefault(); e.stopImmediatePropagation() });
+        this.renderer.domElement.addEventListener("touchmove", (e) => { e.preventDefault(); e.stopImmediatePropagation() });
         this.renderer.domElement.addEventListener("pointerdown", this.onPointerDown.bind(this));
         this.renderer.domElement.addEventListener("pointermove", this.onPointerMove.bind(this));
         this.renderer.domElement.addEventListener("pointerup", this.onPointerUp.bind(this));
+        this.renderer.domElement.addEventListener("pointerleave", this.onPointerUp.bind(this));
         this.renderer.domElement.addEventListener("resize", this.onWindowResize.bind(this));
     }
 
@@ -186,6 +192,8 @@ export class Project {
         this._moveCurr.copy(this.getMouseOnCircle(event.pageX, event.pageY));
         this._movePrev.copy(this._moveCurr);
         this.pointerDown = true;
+        this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+        this.mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
         this.raycaster.setFromCamera(this.mouse, this.camera);
         if (this.rubiksCube.getPlaneOfIntersection(this.raycaster, this.planeForRotation)) {
             this.isModelSelected = true;
@@ -363,6 +371,7 @@ export class Project {
             this.update();
         }
         this.renderer.render(this.scene, this.camera)
+        // this.renderer.render(this.overlayscene, this.camera)
     }
 
     animate() {
