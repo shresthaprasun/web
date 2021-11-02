@@ -1,11 +1,11 @@
 .TextViewer {
   position: relative;
-  max-width: 80%;
-  border: 2px;
-  border-style: solid;
-  border-color: rgb(99, 97, 97);
-  border-radius: 20px;
+  max-width: 100%;
+  border-top-style: solid;
+  border-top-color: rgb(99, 97, 97);
+  border-top-width: 2px ;
   background-color: rgba(245, 245, 245, 0.7);  
   pointer-events: none;
   padding: 10px;
+  white-space: pre-wrap;
 }

@@ -2,19 +2,20 @@
   position: absolute;
   z-index: 1;
   max-width: 80%;
-  top: 100px;
-  left: 100px;
+  top: 5%;
+  left: 10%;
   border: 2px;
   border-style: solid;
   border-color: rgb(99, 97, 97);
   border-radius: 20px;
   background-color: rgba(245, 245, 245, 0.7);  
-  padding: 10px;
+  padding: 5px;
   pointer-events: none;
 }
 
 img{
   border-radius: 50%;
   max-width: 150px;
+  width: 20vw;
   pointer-events: all;
 }
